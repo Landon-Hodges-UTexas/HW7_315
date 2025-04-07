@@ -1,0 +1,189 @@
+---
+title: "HW 7 315"
+author: "Landon Hodges"
+date: "2025-04-07"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+library(mosaic)
+library(tidyverse)
+library(MatchIt)
+```
+
+## Problem 1: Armfolding
+
+```{r armfolding}
+af <- read_csv("armfold.csv", show_col_types = FALSE)
+
+# Summary Stats
+male <- sum(af$Sex=="Male")
+female <- sum(af$Sex=="Female")
+maleProp <- sum(af$LonR_fold[af$Sex=="Male"]==1)/male
+femaleProp <- sum(af$LonR_fold[af$Sex=="Female"]==1)/female
+
+# Difference and hand calculated confint
+diff <- maleProp-femaleProp
+
+confint <- prop.test(x = c(maleProp*male, femaleProp*female), n = c(male, female), correct = FALSE)
+
+```
+
+##### A.
+
+There are `r male` men and `r female` women in the dataset. The proportion of left arm crossers for the men is `r round(maleProp, 3)`, and for the women, `r round(femaleProp, 3)`
+
+##### B.
+
+This places the difference in proportions at `r round(diff, 3)`.
+
+##### C.
+Using R's built in prop.test function yields a confidence interval of `r round(confint$conf.int[1], 3)` to `r round(confint$conf.int[2],3)`
+
+The formula for the standard error of the difference of two proportions is:
+$\text{SE} = \sqrt{ \frac{p_1(1 - p_1)}{n_1} + \frac{p_2(1 - p_2)}{n_2} }$
+
+Plugging in the values from the data:
+$\text{SE} = \sqrt{ \frac{.472(1 - .472)}{106} + \frac{.423(1 - .423)}{111} }$
+
+Which gives us a standard error of 0.0675, and a z star of 1.96 since we're doing a two-sided 95% confidence interval.
+Therefore the confidence interval will be the difference in proportions, `r round(diff,3)`, plus and minus 0.1323.
+This formula yields a hand-calculated confidence interval of `r round(diff-.1323,3)` to `r round(diff+.1323,3)`, which matches the built-in function within rounding errors.
+
+##### D.
+Blank 1: Repeat this test with many different samples
+
+Blank 2: The interval would capture the true proportion roughly 95% of the time.
+
+##### E.
+The standard error is quantifying the uncertainty that comes from our random sampling from the population of all men and women.
+
+##### F.
+The sampling distribution represents the probability distribution of differences in proportions among all the possible samples of `r male` men and `r female` women. The x-axis is the difference in proportions, and the y-axis is the probability of that value.
+
+##### G.
+The Central Limit Theorem justifies modeling this sampling distribution as normal, because the sample size is sufficiently large. This is because each experimental unit is independent, and has a small effect on the final difference of proportions of the sample. The normal distribution can be characterized as being the sum of many small, independent nudges.
+
+##### H.
+I would say that there is circumstantial evidence to suggest we shouldn't be hasty in dismissing the effect. It's at least worth trying to replicate these results to see if the interval moves. 
+
+##### I.
+Yes, the interval would move, and about 95% of them would capture the true difference in proportion of left arm crossers among all men and women.
+
+\newpage
+
+``` {r turnout}
+turnout <- read_csv("turnout.csv", show_col_types = FALSE)
+
+proptable <- prop(voted1998 ~ GOTV_call, data=turnout)
+test1 <- prop.test(
+  x = c(sum(turnout$voted1998[turnout$GOTV_call==1]==1), sum(turnout$voted1998[turnout$GOTV_call==0]==1)), 
+  n = c(sum(turnout$GOTV_call==1), sum(turnout$GOTV_call==0)),
+  correct=FALSE
+  )
+confint1 <- test1$conf.int
+diff1 = -diff(test1$estimate)
+
+# Evidence of confounders
+
+  # Previously voted
+test2 <- prop.test(
+  x = c(sum(turnout$voted1998[turnout$voted1996==1]==1), sum(turnout$voted1998[turnout$voted1996==0]==1)), 
+  n = c(sum(turnout$voted1996==1), sum(turnout$voted1996==0)),
+  correct=FALSE
+  )
+confint2 <- test2$conf.int
+diff2 = -diff(test2$estimate)
+
+test3 <- prop.test(
+  x = c(sum(turnout$GOTV_call[turnout$voted1996==1]==1), sum(turnout$GOTV_call[turnout$voted1996==0]==1)), 
+  n = c(sum(turnout$voted1996==1), sum(turnout$voted1996==0)),
+  correct=FALSE
+  )
+confint3 <- test3$conf.int
+diff3 = -diff(test3$estimate)
+
+  # Major Party
+test4 <- prop.test(
+  x = c(sum(turnout$voted1998[turnout$MAJORPTY==1]==1), sum(turnout$voted1998[turnout$MAJORPTY==0]==1)), 
+  n = c(sum(turnout$MAJORPTY==1), sum(turnout$MAJORPTY==0)),
+  correct=FALSE
+)
+confint4 <- test4$conf.int
+diff4 = -diff(test4$estimate)
+
+test5 <- prop.test(
+  x = c(sum(turnout$GOTV_call[turnout$MAJORPTY==1]==1), sum(turnout$GOTV_call[turnout$MAJORPTY==0]==1)), 
+  n = c(sum(turnout$MAJORPTY==1), sum(turnout$MAJORPTY==0)),
+  correct=FALSE
+)
+confint5 <- test5$conf.int
+diff5 = -diff(test5$estimate)
+
+  # Age
+test6 <- t.test(AGE ~ voted1998, data=turnout)
+confint6 <- test6$conf.int
+diff6 = -diff(test6$estimate)
+
+test7 <- t.test(AGE ~ GOTV_call, data=turnout)
+confint7 <- test7$conf.int
+diff7 = -diff(test7$estimate)
+
+# Matching
+
+turnout_match <- matchit(GOTV_call ~ AGE + factor(MAJORPTY) + factor(voted1996), data = turnout, ratio=5)
+matched <- match.data(turnout_match)
+
+  # OG Analysis
+proptable_matched <- prop(voted1998 ~ GOTV_call, data=matched)
+test <- prop.test(
+  x = c(sum(matched$voted1998[matched$GOTV_call==1]==1), sum(matched$voted1998[matched$GOTV_call==0]==1)), 
+  n = c(sum(matched$GOTV_call==1), sum(matched$GOTV_call==0)),
+  correct=FALSE
+  )
+confint <- test$conf.int
+
+```
+
+## Problem 2
+
+### Part A.
+
+The proportion of those who received a call that voted in 1998 was `r round(proptable[2], 3)`, and the sample proportion out of those who didn't receive the call that voted was `r round(proptable[1], 3)`
+The difference in these two proportions was `r round(diff1, 3)`, with a 95% confidence interval between `r round(confint1[1],3)` and `r round(confint1[2],3)`.
+
+### Part B.
+
+However, this analysis is clouded by some confounders, which I'll prove below. A confounder is identified as being correlated with the explanatory variable (GOTV calls) and causing the response variable (voting in 1998).
+
+##### Previous voting:
+
+It would make sense that a record of voting would correlate with voting again, but does it correlate with getting a call? Let's find out.
+Comparing the populations of those who voted in 1996 with those who didn't, the difference in the proportions of 1998 voters was `r round(diff2, 3)` in favor of having voted in 1996, with a 95% confidence interval between `r round(confint2[1],3)` and `r round(confint2[2],3)`, and the difference in the proportions of GOVT call recipients was `r round(diff3, 3)` in favor of having voted in 1996, with a 95% confidence interval between `r round(confint3[1],3)` and `r round(confint3[2],3)`
+
+##### Party Membership:
+
+Comparing the populations of those who were members of the majority party with those who weren't, the difference in the proportions of 1998 voters was `r round(diff4, 3)` in favor of being in the majority party, with a 95% confidence interval between `r round(confint4[1],3)` and `r round(confint4[2],3)`, and the difference in proportions of GOTV call recipients was `r round(diff5, 3)` in favor of being in the majority party, with a 95% confidence interval between `r round(confint5[1],3)` and `r round(confint5[2],3)`
+
+##### Age:
+
+Comparing the populations of those who voted in 1998 and those who didn't, the difference in the ages was `r round(diff6, 3)`, with the voters being older, with a 95% confidence interval between `r round(confint6[1],3)` and `r round(confint6[2],3)`. When comparing the populations of those who recieved a GOTV call and those who didn't, the diffence in average age was `r round(diff7, 3)`, with those who recieved a call being older on average, with a 95% confidence interval between `r round(confint7[1],3)` and `r round(confint7[2],3)`
+
+### Part C.
+
+To solve this confounding variable problem, we can match on the above criteria. We will find five controls with similar age, voting history, and party affiliation for each individual who did received a GOTV call, and omit all the non-matched data points.
+
+After performing this operation, the Standardized Mean Difference of each confounding variable is greatly reduced. The effect of age was reduced by a factor of 200, the effect of party was reduced by a factor of ten, and the effect of voting in 1996 was effectively erased. You can compare the SMD's of the raw data and the matched data for yourself in the appendix following the conclusion.
+
+#### Conclusion
+
+Now, performing the original analysis on the matched data, we find that when we match subjects with similar age, voting history, and party affiliation, the sample proportion of individuals who received a call from GOTV that voted in the 1998 election is `r round(proptable_matched[2], 3)`, and the sample proportion of voters in the group of individuals who didn't receive a call is `r round(proptable_matched[1], 3)`. A 95% confidence interval for the difference in proportions is `r confint[1]` to `r confint[2]`, meaning that those who recieved a call from GOTV were significantly more likely to vote in the 1998 election.
+
+\newpage
+
+# Appendix - Summary Table for matched SMD
+
+``` {r}
+summary(turnout_match)
+```
